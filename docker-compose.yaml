@@ -1,0 +1,23 @@
+version: '3.4'
+services:
+  verify_licenses:
+    container_name: 'verify_licenses'
+    image: verify_licenses
+    build: .
+    restart: unless-stopped
+    volumes:
+    - ./db:/app/db
+    - ./target:/app/target
+    - ./docker:/app/docker
+    ports:
+      - '127.0.0.1:8082:8082'
+    environment:
+      - DOCKER_HOST=tcp://docker_licenses:2375
+
+  docker:
+    container_name: 'docker_licenses'
+    image: docker:stable-dind
+    privileged: true
+    volumes:
+      - ./target:/app/target
+      - ./docker:/app/docker  

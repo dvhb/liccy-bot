@@ -1,0 +1,14 @@
+env
+config.py.bak
+docker-compose.yaml.bak
+__pycache__
+database.sqlite
+*.db
+*.pyc
+db/
+redis-data
+celery*
+target/
+!target/get-licenses.py
+.pytest_cache
+Jenkinsfile

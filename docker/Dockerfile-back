@@ -1,0 +1,10 @@
+FROM python:3
+RUN apt-get update && apt-get install -y vim locales locales-all
+ENV LC_ALL en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US.UTF-8
+RUN apt-get update && apt-get install -y build-essential python3-dev python3-pip python3-lxml libjpeg-dev libfreetype6-dev libxml2-dev libc6-dev libssl-dev libxslt1-dev libxslt-dev libpq-dev zlib1g-dev git libgdal-dev
+
+WORKDIR /app/target
+
+ENTRYPOINT while true; do sleep 1000; done

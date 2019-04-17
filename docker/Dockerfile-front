@@ -1,0 +1,8 @@
+FROM node:8-alpine
+RUN apk update && \
+    apk upgrade && \
+    apk add git
+
+WORKDIR /app/target
+
+ENTRYPOINT while true; do sleep 1000; done

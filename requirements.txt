@@ -1,0 +1,9 @@
+docker
+flask
+flask-sqlalchemy
+python-gitlab
+uwsgi
+slackclient
+celery
+redis
+cffi
