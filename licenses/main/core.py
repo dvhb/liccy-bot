@@ -75,8 +75,8 @@ def write_db(project, package_type, packages):
             if license in blacklist:
                 bad_licenses[project].append({'name': package, 'license': license})
 
-    all_licenses_project1 = set(all_licenses_project)
-    for license in all_licenses_project1:
+    all_licenses_project_uniq = set(all_licenses_project)
+    for license in all_licenses_project_uniq:
         if license not in all_licenses_db:
             db.session.add(LicensesList(license_name=license, license_type=None))
             db.session.commit()
@@ -87,10 +87,37 @@ def write_db(project, package_type, packages):
     return bad_licenses
 
 
-def validate_license(license):
+def notify_managers(bad_licenses, repo_type):
+    text_template = 'In the project {project} ({repo_type} the library {library} has bad license {license}\n'
     managers = app.config.get('MANAGERS')
-    # send license to managers to validate
     for user in managers:
+        text = ''
+        for project, libs in bad_licenses.items():
+            for lib in libs:
+                text += text_template.format(project=project,
+                                             repo_type=repo_type,
+                                             library=lib['name'],
+                                             license=lib['license'])
+        user_id = app.config.get('SLACK_USERS').get(user)
+        channel = sc.api_call(
+                'conversations.open',
+                users=user_id
+                )
+        if channel['ok']:
+            msg = sc.api_call(
+                    'chat.postMessage',
+                    channel=channel['channel']['id'],
+                    text=text
+                    )
+            if msg['ok']:
+                return True
+        return False
+
+
+def validate_license(license):
+    lawyers = app.config.get('LAWYERS')
+    # send license to managers to validate
+    for user in lawyers:
         user_id = app.config.get('SLACK_USERS').get(user)
         channel = sc.api_call(
                 'conversations.open',
@@ -177,7 +204,8 @@ def get_licenses():
         if len(content_list) > 1:
             write_content('Pipfile', re.sub('-r .*\n', '', content_list[0]))
             write_content('Pipfile.lock', re.sub('-r .*\n', '', content_list[1]))
-            write_db(project.tag_list[0], 'backend_pipfile', requirements_backend_pipfile())
+            bad_licenses = write_db(project.tag_list[0], 'backend_pipfile', requirements_backend_pipfile())
+            notify_managers(bad_licenses, 'backend')
         content = '\n'.join(content_list)
         # Remove -r ./filename.txt lines
         content = re.sub('-r .*\n', '', content)
@@ -188,13 +216,15 @@ def get_licenses():
             with open(filename, 'w') as f:
                 f.write(content)
                 f.close()
-            write_db(project.tag_list[0], repo_type, requirements_backend())
+            bad_licenses = write_db(project.tag_list[0], repo_type, requirements_backend())
+            notify_managers(bad_licenses, 'backend')
         elif repo_type == 'frontend':
             filename = os.path.join(os.getcwd(), 'target', 'package.json')
             with open(filename, 'w') as f:
                 f.write(content)
                 f.close()
-            write_db(project.tag_list[0], repo_type, requirements_frontend())
+            bad_licenses = write_db(project.tag_list[0], repo_type, requirements_frontend())
+            notify_managers(bad_licenses, 'frontend')
 
 
 def requirements_frontend():

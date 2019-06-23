@@ -31,5 +31,6 @@ You need to tag your repos with project keys, if for example there is frontend a
 * GITLAB_TOKEN=gitlab_token
 * SLACK_TOKEN=slack_token
 * SLACK_SIGNING_SECRET=slack_secret
-* MANAGERS=user1,user2 (users who will verify licenses)
+* LAWYERS=user1,user2 (users who will verify licenses)
+* MANAGERS=user1,user2 (users who will get notifications about bad licenses)
 * TAG_SET=project1,project2 (project tags)
