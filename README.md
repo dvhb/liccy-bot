@@ -1,6 +1,6 @@
-# Verify licenses bot
+# Liccy Bot
 
-CheckMyLicense bot makes sure the license you use in a project is ok for commercial purposes. 
+Liccy bot makes sure the license you use in a project is ok for commercial purposes. 
 
 Once a day the bot scans all of your repos in Gitlab and collects integrated libraries. The list of libraries is formed based on `requirement.txt` file in requirements directory or `package.json` that the bot gets from the project root. 
 
