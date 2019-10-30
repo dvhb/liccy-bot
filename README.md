@@ -22,11 +22,10 @@ Note:
 * In the Interactive Components menu, you should add Request url as `https://your.server.ip.address:8082/api/licenses/interactive`
 * Install the app to your workspace.
 * After that, you need to set Bot User OAuth Access Token as `SLACK_TOKEN` (you can find it in OAuth & Permissions menu) and Signing Secret as `SLACK_SIGNING_SECRET`.
-## Setup your Gitlab instance
 
-You need to tag your repos with project keys, if for example there is frontend and backend repos for the project, you should tag that repos with one TAG, after that you should set TAG_SET variable with tag list.
+## Setup your Gitlab instance or Github account
 
-If there are a few separate repos for one project (e.g. frontend and backend), tag them with project keys. Tag the repos with one TAG and then set a TAG_SET variable with the tag list.
+You need to set topics for your repos with project keys, if for example there is frontend and backend repos for the project, you should set topic for that repos with one TAG, after that you should set TAG_SET variable with topics list.
 
 ### Necessary environment variable
 - GITLAB_URL=https://gitlab.url
@@ -36,4 +35,4 @@ If there are a few separate repos for one project (e.g. frontend and backend), t
 - SLACK_SIGNING_SECRET=slack_secret
 - LAWYERS=user1,user2 (users who will verify licenses)
 - MANAGERS=user1,user2 (users who will get notifications about bad licenses)
-- TAG_SET=project1,project2 (project tags)
+- TAG_SET=project1,project2 (project topics)
