@@ -4,49 +4,102 @@ import re
 import os
 from collections import defaultdict
 
-from urllib.parse import urlparse
-
 from licenses.main.models import LicensesList, Licenses
-from licenses.main.controllers import licenses_list
-from licenses import app, db, sc, dc, gl
+from licenses.main.dependency import dependency
+from licenses import app, db, sc, gl, gh
+from licenses.main.slack import notify_managers, validate_license
 
 import threading
 import time
 
 
-def get_content(project, item):
-    file_info = project.repository_blob(item['id'])
-    return b64decode(file_info['content'])
+SOURCE_ERROR = 'Please, specify source: gitlab or github'
 
 
-def get_file(project):
-    items = project.repository_tree(all=True)
+def get_content(source, item):
+    if source == 'gitlab':
+        return item.decode().decode('utf-8')
+    elif source == 'github':
+        return b64decode(item.raw_data.get('content')).decode('utf-8')
+    else:
+        raise Exception(SOURCE_ERROR)
+
+
+def get_topics(source, project):
+    if source == 'gitlab':
+        return project.tag_list
+    elif source == 'github':
+        return project.get_topics()
+    else:
+        raise Exception(SOURCE_ERROR)
+
+
+def set_filename(source, filename):
+    if source == 'gitlab':
+        return filename.file_name
+    elif source == 'github':
+        return filename.name
+    else:
+        raise Exception(SOURCE_ERROR)
+
+
+def get_file_filename(source, project, filename):
+    data = None
+    if source == 'github':
+        try:
+            data = project.get_contents(filename)
+        # @TODO catch 404 github error
+        except Exception:
+            pass
+    elif source == 'gitlab':
+        try:
+            data = project.files.get(file_path=filename, ref=app.config.get('GITLAB_REFERENCE'))
+        # @TODO catch 404 gitlab error
+        except Exception:
+            pass
+    else:
+        raise Exception(SOURCE_ERROR)
+    return data
+
+
+def get_file_directory(source, project, directory):
     data = []
-    repo_type = ''
-    for item in items:
-        if item.get('name') == 'requirements' and item.get('type') == 'tree':
-            requirements = project.repository_tree(path='requirements')
-            for requirement in requirements:
-                content = get_content(project, requirement)
-                data.append(content.decode('utf-8'))
-                repo_type = 'backend'
-        elif item.get('name') == 'requirements.txt' and item.get('type') == 'blob':
-            content = get_content(project, item)
-            data.append(content.decode('utf-8'))
-            repo_type = 'backend'
-        elif item.get('name') == 'Pipfile' and item.get('type') == 'blob':
-            content = get_content(project, item)
-            data.append(content.decode('utf-8'))
-            repo_type = 'backend_pipfile'
-        elif item.get('name') == 'Pipfile.lock' and item.get('type') == 'blob':
-            content = get_content(project, item)
-            data.append(content.decode('utf-8'))
-            repo_type = 'backend_pipfile'
-        elif item.get('name') == 'package.json' and item.get('type') == 'blob':
-            content = get_content(project, item)
-            data.append(content.decode())
-            repo_type = 'frontend'
-    return repo_type, data
+    if source == 'github':
+        try:
+            data = project.get_contents(directory)
+        # @TODO catch 404 github error
+        except Exception:
+            pass
+    elif source == 'gitlab':
+        try:
+            pre_data = project.repository_tree(path=directory, ref=app.config.get('GITLAB_REFERENCE'))
+            if pre_data:
+                data = [x.get('path') for x in pre_data]
+        # @TODO catch 404 gitlab error
+        except Exception:
+            pass
+    return data
+
+
+def get_file(source, project):
+    result = defaultdict(list)
+    data = None
+
+    for project_type, filenames in app.config.get('FILES_TO_GET').items():
+        for file_type, filenames_list in filenames.items():
+            if file_type == 'files':
+                for filename in filenames_list:
+                    data = get_file_filename(source, project, filename)
+                    if data is not None:
+                        result[project_type].append(data)
+            if file_type == 'directories':
+                for directory in filenames_list:
+                    file_list = get_file_directory(source, project, directory)
+                    for f in file_list:
+                        data = get_file_filename(source, project, f)
+                        if data is not None:
+                            result[project_type].append(data)
+    return result
 
 
 def write_db(project, package_type, packages):
@@ -87,106 +140,25 @@ def write_db(project, package_type, packages):
     return bad_licenses
 
 
-def notify_managers(bad_licenses, repo_type):
-    text_template = 'In the project {project} ({repo_type} the library {library} has bad license {license}\n'
-    managers = app.config.get('MANAGERS')
-    for user in managers:
-        text = ''
-        for project, libs in bad_licenses.items():
-            for lib in libs:
-                text += text_template.format(project=project,
-                                             repo_type=repo_type,
-                                             library=lib['name'],
-                                             license=lib['license'])
-        user_id = app.config.get('SLACK_USERS').get(user)
-        channel = sc.api_call(
-                'conversations.open',
-                users=user_id
-                )
-        if channel['ok']:
-            msg = sc.api_call(
-                    'chat.postMessage',
-                    channel=channel['channel']['id'],
-                    text=text
-                    )
-            if msg['ok']:
-                return True
-        return False
-
-
-def validate_license(license):
-    lawyers = app.config.get('LAWYERS')
-    # send license to managers to validate
-    for user in lawyers:
-        user_id = app.config.get('SLACK_USERS').get(user)
-        channel = sc.api_call(
-                'conversations.open',
-                users=user_id
-                )
-        if channel['ok']:
-            attachments = json.dumps(
-                    [{
-                        "callback_id": "validate_license",
-                        "fallback": "Error.",
-                        "text": "Approve license " + license,
-                        "actions": [{
-                            "name": "yes",
-                            "text": "Yes!",
-                            "type": "button",
-                            "value": license
-                            },
-                            {
-                            "name": "no",
-                            "text": "No!",
-                            "type": "button",
-                            "value": license
-                            }]
-                        }]
-
-                    )
-            msg = sc.api_call(
-                    'chat.postMessage',
-                    channel=channel['channel']['id'],
-                    text='Action needed:',
-                    attachments=attachments
-                    )
-            if msg['ok']:
-                return True
-    return False
-
-
-def licenses_action(ls, request):
-    text = request.form.get('text')
-    l_list = licenses_list(ls)
-    if not text:
-        if ls:
-            licenses_message = 'Here are the licenses whitelist: {}'.format(l_list) if l_list else 'Whitelist is empty'
-        else:
-            licenses_message = 'Here are the licenses blacklist: {}'.format(l_list) if l_list else 'Blacklist is empty'
-
-        return licenses_message
-    else:
-        action, licenses = text.split(' ')
-        for license in licenses.split(','):
-            if action == 'add':
-                db.session.add(LicensesList(license_name=license, license_type=ls))
-            elif action == 'del':
-                to_delete = LicensesList.query.filter_by(license_name=license, license_type=ls).first()
-                db.session.delete(to_delete)
-        db.session.commit()
-        return '{} is performed'.format(action.capitalize())
-
-
-def get_gitlab_projects():
-    tag_set = set(app.config.get('TAG_SET')) if app.config.get('TAG_SET') is not None else [None]
+def get_projects(source):
+    tag_set = set(app.config.get('TAG_SET')) if app.config.get('TAG_SET') is not None else None
+    if tag_set is None:
+        raise Exception('Please, specify TAG_SET environment variable')
     data = []
-    if gl.version()[0] == 'Unknown':
-        return None
-    projects = gl.projects.list(all=True)
-    for project in projects:
-        tags = set(project.tag_list)
-        if tag_set.intersection(tags):
-            data.append(project)
+    if source == 'gitlab':
+        projects = gl.projects.list(all=True)
+        for project in projects:
+            tags = set(project.tag_list)
+            if tag_set.intersection(tags):
+                data.append(project)
+    elif source == 'github':
+        projects = gh.get_user().get_repos()
+        for project in projects:
+            tags = set(project.get_topics())
+            if tag_set.intersection(tags):
+                data.append(project)
+    else:
+        raise Exception(SOURCE_ERROR)
     return data
 
 
@@ -197,104 +169,16 @@ def write_content(filename, content):
             f.close()
 
 
-def get_licenses():
-    projects = get_gitlab_projects()
+def get_licenses(source):
+    projects = get_projects(source)
     for project in projects:
-        repo_type, content_list = get_file(project)
-        if len(content_list) > 1:
-            write_content('Pipfile', re.sub('-r .*\n', '', content_list[0]))
-            write_content('Pipfile.lock', re.sub('-r .*\n', '', content_list[1]))
-            bad_licenses = write_db(project.tag_list[0], 'backend_pipfile', requirements_backend_pipfile())
-            notify_managers(bad_licenses, 'backend')
-        content = '\n'.join(content_list)
-        # Remove -r ./filename.txt lines
-        content = re.sub('-r .*\n', '', content)
-        hostname = urlparse(app.config.get('GITLAB_URL')).netloc
-        content = re.sub('.*' + hostname + '.*', '', content)
-        if repo_type == 'backend':
-            filename = os.path.join(os.getcwd(), 'target', 'requirements.txt')
-            with open(filename, 'w') as f:
-                f.write(content)
-                f.close()
-            bad_licenses = write_db(project.tag_list[0], repo_type, requirements_backend())
-            notify_managers(bad_licenses, 'backend')
-        elif repo_type == 'frontend':
-            filename = os.path.join(os.getcwd(), 'target', 'package.json')
-            with open(filename, 'w') as f:
-                f.write(content)
-                f.close()
-            bad_licenses = write_db(project.tag_list[0], repo_type, requirements_frontend())
-            notify_managers(bad_licenses, 'frontend')
-
-
-def requirements_frontend():
-    license_data = {}
-    volume = {os.path.join(os.getcwd(), 'target'): {'bind': '/app/target', 'mode': 'rw'}}
-    image = dc.images.build(path='/app/docker', dockerfile='Dockerfile-front', tag='licenses-front')
-    container = dc.containers.run(image[0].tags[0], detach=True, volumes=volume,
-                                  name='license-check-front')
-    try:
-        container.exec_run('yarn install --no-lockfile')
-        container.exec_run('npm install -g license-checker')
-    except Exception:
-        return Exception
-
-    status, packages = container.exec_run('license-checker --json')
-    packages_json = None
-    if packages is not None and b'Found error' not in packages:
-        packages_json = json.loads(packages.decode())
-        for package, properties in packages_json.items():
-            license = properties.get('licenses')
-            package_name = package.split('@')[0]
-            license_data[package_name] = license
-    container.exec_run('rm -rf node_modules/')
-    container.exec_run('rm package.json')
-    container.remove(force=True)
-    return license_data
-
-
-def requirements_backend():
-    license_data = {}
-    volume = {os.path.join(os.getcwd(), 'target'): {'bind': '/app/target', 'mode': 'rw'}}
-    image = dc.images.build(path='/app/docker', dockerfile='Dockerfile-back', tag='licenses-back')
-    container = dc.containers.run(image[0].tags[0], detach=True, volumes=volume,
-                                  name='license-check-backend')
-    try:
-        container.exec_run('pip install -r requirements.txt')
-    except Exception:
-        return Exception
-
-    status, licenses = container.exec_run('python ./get-licenses.py')
-    licenses = licenses.decode().split('\n')
-    for license in licenses:
-        lic = license.split(':')
-        if len(lic) > 1:
-            license_data[lic[0]] = lic[1]
-    container.exec_run('rm requirements.txt')
-    container.remove(force=True)
-    return license_data
-
-
-def requirements_backend_pipfile():
-    license_data = {}
-    volume = {os.path.join('/app/target'): {'bind': '/app/target', 'mode': 'rw'}}
-    image = dc.images.build(path='/app/docker', dockerfile='Dockerfile-back', tag='licenses-back')
-    container = dc.containers.run(image[0].tags[0], detach=True, volumes=volume,
-                                  name='license-check-backend')
-    try:
-        container.exec_run('pip install pipenv')
-        container.exec_run('pipenv install --system')
-    except Exception:
-        return Exception
-    status, licenses = container.exec_run('python ./get-licenses.py')
-    licenses = licenses.decode().split('\n')
-    for license in licenses:
-        lic = license.split(':')
-        if len(lic) > 1:
-            license_data[lic[0]] = lic[1]
-    container.exec_run('rm Pipfile*')
-    container.remove(force=True)
-    return license_data
+        dep_data = get_file(source, project)
+        for repo_type, filename in dep_data.items():
+            for f in filename:
+                write_content(set_filename(source, f), re.sub('-r .*\n', '', get_content(source, f)))
+            dependency_list = dependency(repo_type)
+            bad_licenses = write_db(get_topics(source, project)[0], repo_type, dependency_list)
+            notify_managers(bad_licenses)
 
 
 class LicensesThreading(object):
@@ -307,7 +191,9 @@ class LicensesThreading(object):
         thread.start()
 
     def run(self):
-
         while True:
-            get_licenses()
+            if app.config.get('GITLAB_TOKEN') is not None:
+                get_licenses('gitlab')
+            if app.config.get('GITHUB_TOKEN') is not None:
+                get_licenses('github')
             time.sleep(self.interval)

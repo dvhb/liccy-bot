@@ -1,0 +1,52 @@
+- model: licenses.main.models.LicensesList
+  records:
+    - license_name: CC0-1.0
+      license_type: True
+    - license_name: WTFPL
+      license_type: True
+    - license_name: Unlicense
+      license_type: True
+    - license_name: Public Domain
+      license_type: True
+    - license_name: GPLv3
+      license_type: False
+    - license_name: GPL2
+      license_type: False
+    - license_name: GPL
+      license_type: False
+    - license_name: CC BY-NC 3.0
+      license_type: False
+    - license_name: Affero GPL
+      license_type: False
+    - license_name: MIT
+      license_type:
+    - license_name: ISC
+      license_type:
+    - license_name: Apache
+      license_type:
+    - license_name: BSD
+      license_type:
+    - license_name: BSD-2-Clause
+      license_type:
+    - license_name: CC-BY-4.0
+      license_type:
+    - license_name: MPL-2.0
+      license_type:
+    - license_name: Expat license
+      license_type:
+    - license_name: CC-BY-3.0
+      license_type:
+    - license_name: New BSD
+      license_type:
+    - license_name: LGPL v3
+      license_type:
+    - license_name: Standart PIL License
+      license_type:
+    - license_name: PSF License
+      license_type:
+    - license_name: GNU LGPL v2.1
+      license_type:
+    - license_name: Custom
+      license_type:
+    - license_name: ZPL
+      license_type:

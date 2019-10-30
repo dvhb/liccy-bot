@@ -1,9 +1,12 @@
 docker
 flask
 flask-sqlalchemy
+flask-fixtures
+Flask-Mail
+pyyaml
 python-gitlab
-uwsgi
+PyGithub
 slackclient==1.3.2
-celery
-redis
+websocket-client<0.55
 cffi
+pytest

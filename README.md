@@ -31,9 +31,9 @@ If there are a few separate repos for one project (e.g. frontend and backend), t
 ### Necessary environment variable
 - GITLAB_URL=https://gitlab.url
 - GITLAB_TOKEN=gitlab_token
+- GITHUB_TOKEN=github_token
 - SLACK_TOKEN=slack_token
 - SLACK_SIGNING_SECRET=slack_secret
 - LAWYERS=user1,user2 (users who will verify licenses)
 - MANAGERS=user1,user2 (users who will get notifications about bad licenses)
 - TAG_SET=project1,project2 (project tags)
-

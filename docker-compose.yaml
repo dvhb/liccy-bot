@@ -1,23 +1,31 @@
 version: '3.4'
 services:
-  verify_licenses:
-    container_name: 'verify_licenses'
-    image: verify_licenses
+  liccy_bot:
+    container_name: 'liccy_bot'
+    image: liccy_bot
     build: .
     restart: unless-stopped
+    entrypoint: 'python -m run --with-licenses-collector'
+    depends_on:
+      - 'liccy_docker'
     volumes:
     - ./db:/app/db
     - ./target:/app/target
     - ./docker:/app/docker
     ports:
-      - '127.0.0.1:8082:8082'
+      - '127.0.0.1:8082:5000'
     environment:
-      - DOCKER_HOST=tcp://docker_licenses:2375
+      - DOCKER_HOST=tcp://liccy_docker:2375
+    env_file:
+      - .env
 
-  docker:
-    container_name: 'docker_licenses'
-    image: docker:stable-dind
+  liccy_docker:
+    container_name: 'liccy_docker'
+    restart: unless-stopped
+    image: docker:19.03.0-dind
     privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
     volumes:
       - ./target:/app/target
       - ./docker:/app/docker  

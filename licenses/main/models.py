@@ -24,7 +24,3 @@ class LicensesList(db.Model):
 
     def __repr__(self):
         return '<License %r>' % self.license_name
-
-
-def create_all():
-    return db.create_all()

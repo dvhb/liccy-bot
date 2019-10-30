@@ -91,11 +91,11 @@ def interactive():
 
         action = button_action(data.get('callback_id'), data.get('actions'))
         if action == 'already_set':
-            text = om.get('attachments')[0]['text'] + '\n:exclamation: This license is already defined.'
+            text = om.get('attachments')[0]['text'] + '\n:exclamation: This license is already checked.'
         elif action:
-            text = om.get('attachments')[0]['text'] + '\n:heavy_check_mark: License approved'
+            text = om.get('attachments')[0]['text'] + '\n:white_check_mark: License approved'
         elif not action:
-            text = om.get('attachments')[0]['text'] + '\n:heavy_multiplication_x: License rejected'
+            text = om.get('attachments')[0]['text'] + '\n:heavy_multiplication_x: License is not allowed'
         channel = data.get('channel')['id']
         attachments = [{"text": text}]
         msg = sc.api_call('chat.update',
@@ -113,8 +113,3 @@ def interactive():
 @app.route('/')
 def status():
     return 'ok'
-
-
-@app.route('/again')
-def status2():
-    return 'again'
